@@ -1,0 +1,51 @@
+# Node dependencies
+node_modules/
+
+# Logs
+logs/
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# OS junk
+.DS_Store
+Thumbs.db
+
+# Environment and local config (keep secrets out of git)
+.env
+.env.*
+config.json
+status_state.json
+ufo_state.json
+last_channel.json
+lastfm_users.json
+retard.json
+
+# Build / cache
+.cache/
+dist/
+build/
+
+# Audio/media and large binaries (avoid exceeding GitHub size limits)
+songs/
+covers/
+*.mp3
+*.wav
+*.flac
+*.m4a
+*.aac
+*.ogg
+
+# Local executables
+yt-dlp.exe
+
+# Editor
+.vscode/
+
+# Test artifacts
+test.mp3
+
+# Unrelated helper project in workspace
+spotify-get-refresh-token-main/

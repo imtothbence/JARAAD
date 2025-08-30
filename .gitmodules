@@ -1,0 +1,3 @@
+[submodule "REPO"]
+	path = REPO
+	url = https://github.com/imtothbence/REPO.git
