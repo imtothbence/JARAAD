@@ -924,6 +924,13 @@ function makeMessageShim(interaction) {
     channel: interaction.channel,
     reply: async (content) => {
       const payload = (typeof content === 'string') ? { content } : (content || {});
+      // Auto-ephemeral for error-looking messages so they're user-only and dismissable
+      try {
+        const text = typeof content === 'string' ? content : (content && typeof content.content === 'string' ? content.content : '');
+        if (text && (/^❌/.test(text) || /^⚠️/.test(text) || /\berror\b/i.test(text))) {
+          payload.ephemeral = true;
+        }
+      } catch {}
       if (!interaction.deferred && !interaction.replied) return interaction.reply({ ...payload, fetchReply: true });
       return interaction.followUp(payload);
     }
@@ -1420,7 +1427,7 @@ client.on('interactionCreate', async (interaction) => {
             return void handleSkipCommand(msg);
           case 'snp': {
             const userOpt = interaction.options.getUser('user') || null;
-            await interaction.deferReply();
+            // Avoid deferring so errors can be returned as an initial ephemeral reply
             return void handleSpotifyNowPlaying(msg, userOpt);
           }
           case 'nowplaying':
