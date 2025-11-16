@@ -954,20 +954,16 @@ function makeMessageShim(interaction) {
 // Helper: try to send to channel; on failure, fall back to ephemeral (if available) or plain reply
 async function sendWithEphemeralFallback(message, payload, errorText = "❌ I can't send messages in that channel.") {
   try {
-    const sent = await message.channel.send(payload);
-    try {
-      if (typeof message.ephemeral === 'function') {
-        await message.ephemeral('✅ Sent in this channel.');
-      }
-    } catch {}
-    return sent;
+    return await message.channel.send(payload);
   } catch (e) {
+    // Only show an ephemeral error if this is an interaction context
     try {
       if (typeof message.ephemeral === 'function') {
         await message.ephemeral(typeof errorText === 'string' ? errorText : "❌ I can't send messages in that channel.");
         return null;
       }
     } catch {}
+    // Fallback for prefix commands
     try { await message.reply(typeof errorText === 'string' ? errorText : "❌ I can't send messages in that channel."); } catch {}
     return null;
   }
