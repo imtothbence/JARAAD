@@ -954,15 +954,21 @@ function makeMessageShim(interaction) {
 // Helper: try to send to channel; on failure, fall back to ephemeral (if available) or plain reply
 async function sendWithEphemeralFallback(message, payload, errorText = "❌ I can't send messages in that channel.") {
   try {
-    return await message.channel.send(payload);
+    const sent = await message.channel.send(payload);
+    try {
+      if (typeof message.ephemeral === 'function') {
+        await message.ephemeral('✅ Sent in this channel.');
+      }
+    } catch {}
+    return sent;
   } catch (e) {
     try {
       if (typeof message.ephemeral === 'function') {
-        await message.ephemeral(typeof errorText === 'string' ? errorText : '❌ I can’t send messages in that channel.');
+        await message.ephemeral(typeof errorText === 'string' ? errorText : "❌ I can't send messages in that channel.");
         return null;
       }
     } catch {}
-    try { await message.reply(typeof errorText === 'string' ? errorText : '❌ I can’t send messages in that channel.'); } catch {}
+    try { await message.reply(typeof errorText === 'string' ? errorText : "❌ I can't send messages in that channel."); } catch {}
     return null;
   }
 }
@@ -2539,6 +2545,20 @@ async function handleSongInfoQuery(message, rawQuery) {
   const q = (rawQuery || '').trim();
   if (!q) return void message.reply('❌ Please specify a song name. Example: `!songinfo lucid dreams`');
 
+  // If Sheets didn’t load, explain how to enable it (common on hosted envs)
+  if (!sheetSongLibrary || Object.keys(sheetSongLibrary).length === 0) {
+    return void (async () => {
+      const hint = [
+        '❌ Song database not loaded. Configure Google Sheets credentials:',
+        '- Set `GOOGLE_CREDENTIALS_JSON` (full JSON) or',
+        '- Set `GOOGLE_CLIENT_EMAIL` and `GOOGLE_PRIVATE_KEY` (with \n newlines) or',
+        '- Set `GOOGLE_APPLICATION_CREDENTIALS` to a JSON file path',
+        `Sheet ID in use: ${GOOGLE_SHEETS_CONFIG.SHEET_ID}`
+      ].join('\n');
+      try { await message.reply(hint); } catch { try { await message.author?.send(hint); } catch {} }
+    })();
+  }
+
   const normQuery = normalizeStr(q);
   const candidates = [];
   for (const [key, song] of Object.entries(sheetSongLibrary)) {
@@ -2617,13 +2637,14 @@ async function handleSongInfoQuery(message, rawQuery) {
   }
 
   if (expanded.length === 1) {
-    // Truly a single version; try channel, then ephemeral error, then DM payload
+    // Truly a single version; try channel, then ephemeral error, then DM payload; always complete interactions
     const payload = buildEmbedPayload(expanded[0]);
-    const sent = await sendWithEphemeralFallback(message, payload, '❌ Missing permission to post here. Sent nothing.');
+    const sent = await sendWithEphemeralFallback(message, payload, '❌ Missing permission to post here.');
     if (!sent) {
       try {
         const dm = await message.author.createDM();
         await dm.send(payload);
+        try { if (typeof message.ephemeral === 'function') await message.ephemeral('📩 Sent you the details in DM.'); } catch {}
       } catch (e2) {
         try { console.error('songinfo send failed (DM fallback):', e2?.message || e2); } catch {}
       }
