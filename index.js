@@ -6,6 +6,14 @@ console.log("Platform:", process.platform);
 // Load environment variables from .env
 require('dotenv').config();
 
+// Prevent process exit on unhandled promise rejections or unexpected errors
+process.on('unhandledRejection', (err) => {
+  try { console.error('UnhandledRejection:', err && (err.stack || err.message || err)); } catch {}
+});
+process.on('uncaughtException', (err) => {
+  try { console.error('UncaughtException:', err && (err.stack || err.message || err)); } catch {}
+});
+
 const fs = require('fs');
 const path = require('path');
 const Discord = require('discord.js');
@@ -933,8 +941,30 @@ function makeMessageShim(interaction) {
       } catch {}
       if (!interaction.deferred && !interaction.replied) return interaction.reply({ ...payload, fetchReply: true });
       return interaction.followUp(payload);
+    },
+    // Explicit ephemeral reply helper
+    ephemeral: async (content) => {
+      const payload = (typeof content === 'string') ? { content } : (content || {});
+      if (!interaction.deferred && !interaction.replied) return interaction.reply({ ...payload, ephemeral: true, fetchReply: true });
+      return interaction.followUp({ ...payload, ephemeral: true });
     }
   };
+}
+
+// Helper: try to send to channel; on failure, fall back to ephemeral (if available) or plain reply
+async function sendWithEphemeralFallback(message, payload, errorText = "❌ I can't send messages in that channel.") {
+  try {
+    return await message.channel.send(payload);
+  } catch (e) {
+    try {
+      if (typeof message.ephemeral === 'function') {
+        await message.ephemeral(typeof errorText === 'string' ? errorText : '❌ I can’t send messages in that channel.');
+        return null;
+      }
+    } catch {}
+    try { await message.reply(typeof errorText === 'string' ? errorText : '❌ I can’t send messages in that channel.'); } catch {}
+    return null;
+  }
 }
 
 // ================== BOT EVENTS ==================
@@ -2423,7 +2453,7 @@ async function handleCoverDebugCommand(message, query) {
     const payload = buildEmbedPayload(song);
     await message.reply(payload);
     const pathText = (payload.files && payload.files[0]?.attachment) ? String(payload.files[0].attachment) : 'none';
-    await message.channel.send(`🖼️ Cover path: ${pathText}\nType used: ${song.type || 'unknown'}`);
+    await sendWithEphemeralFallback(message, `🖼️ Cover path: ${pathText}\nType used: ${song.type || 'unknown'}`, '⚠️ Could not post cover debug in this channel.');
   } catch (e) {
     console.error('coverdebug error:', e);
     try { await message.reply('❌ coverdebug failed. Check console.'); } catch {}
@@ -2587,8 +2617,18 @@ async function handleSongInfoQuery(message, rawQuery) {
   }
 
   if (expanded.length === 1) {
-    // Truly a single version; just show it
-    return void message.channel.send(buildEmbedPayload(expanded[0]));
+    // Truly a single version; try channel, then ephemeral error, then DM payload
+    const payload = buildEmbedPayload(expanded[0]);
+    const sent = await sendWithEphemeralFallback(message, payload, '❌ Missing permission to post here. Sent nothing.');
+    if (!sent) {
+      try {
+        const dm = await message.author.createDM();
+        await dm.send(payload);
+      } catch (e2) {
+        try { console.error('songinfo send failed (DM fallback):', e2?.message || e2); } catch {}
+      }
+    }
+    return;
   }
   // Stable sort: released -> unreleased -> unsurfaced, then project, then version
   const typeOrder = { released: 0, unreleased: 1, unsurfaced: 2 };
