@@ -858,6 +858,7 @@ const GUILD_SLASH_COMMANDS = [
     { name: 'privacy', description: 'Public or Private', type: 3, required: false, choices: [{ name: 'public', value: 'public' }, { name: 'private', value: 'private' }] }
   ] },
   { name: 'refresh', description: 'Reload songs library from disk' }
+  ,{ name: 'keepalive', description: 'Toggle periodic keepalive pings to prevent sleeping', options: [ { name: 'mode', description: 'on or off', type: 3, required: true, choices: [ { name: 'on', value: 'on' }, { name: 'off', value: 'off' } ] } ] }
 ];
 
 const GLOBAL_SLASH_COMMANDS = [
@@ -873,6 +874,7 @@ const GLOBAL_SLASH_COMMANDS = [
     { name: 'name', description: 'Optional name for the cloned playlist', type: 3, required: false },
     { name: 'privacy', description: 'Public or Private', type: 3, required: false, choices: [{ name: 'public', value: 'public' }, { name: 'private', value: 'private' }] }
   ] }
+  ,{ name: 'keepalive', description: 'Toggle periodic keepalive pings (on/off)', dm_permission: true, integration_types: [0,1], contexts: [0,1,2], options: [ { name: 'mode', description: 'on or off', type: 3, required: true, choices: [ { name: 'on', value: 'on' }, { name: 'off', value: 'off' } ] } ] }
 ];
 
 async function registerSlashCommandsForGuild(guildId) {
@@ -1036,6 +1038,30 @@ client.on('ready', async () => {
       console.error('❌ Failed to rejoin last voice channel:', err.message || err);
     }
   }
+
+  // Keepalive loop (optional)
+  try {
+    const KEEPALIVE_INTERVAL_MS = Number(process.env.KEEPALIVE_INTERVAL_MS || (30 * 60 * 1000));
+    global.keepAliveEnabled = process.env.KEEPALIVE_ENABLED === '1';
+    if (!global._keepAliveTimer) {
+      global._keepAliveTimer = setInterval(async () => {
+        if (!global.keepAliveEnabled) return;
+        try {
+          // Light presence heartbeat
+          client.user.setActivity('!help', { type: Discord.ActivityType.Listening });
+        } catch {}
+        // Optional external ping if KOYEB_KEEPALIVE_URL is set
+        const url = process.env.KOYEB_KEEPALIVE_URL;
+        if (url) {
+          try { await fetch(url, { method: 'GET', headers: { 'User-Agent': 'KeepAliveBot/1.0' } }).catch(() => {}); } catch {}
+        }
+        // Lightweight Discord REST poke (users/@me) to ensure outbound traffic
+        try {
+          if (DISCORD_TOKEN) await fetch('https://discord.com/api/v10/users/@me', { headers: { Authorization: `Bot ${DISCORD_TOKEN}` } }).catch(() => {});
+        } catch {}
+      }, KEEPALIVE_INTERVAL_MS).unref?.();
+    }
+  } catch {}
 });
 
 client.on('guildCreate', async (guild) => {
@@ -1531,6 +1557,12 @@ client.on('interactionCreate', async (interaction) => {
             await interaction.deferReply();
             buildSongLibrary().then(lib => { SONG_LIBRARY = lib; msg.reply(`🔄 Reloaded ${Object.keys(SONG_LIBRARY).length} songs`); if (autoPlayEnabled) { if (autoPlayMode === 'mega') buildMegaShuffleDeck().catch(() => {}); else buildAutoShuffleDeck().catch(() => {}); } });
             return;
+          case 'keepalive': {
+            const mode = interaction.options.getString('mode', true);
+            const on = mode === 'on';
+            global.keepAliveEnabled = on;
+            return void interaction.reply({ content: on ? '🟢 Keepalive enabled. Bot will send a heartbeat every ~30m.' : '🔴 Keepalive disabled.', ephemeral: true });
+          }
         }
       } catch (e) {
         console.error('Slash handler error:', e);
