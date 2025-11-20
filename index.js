@@ -80,7 +80,7 @@ try {
 const config = {
   MUSIC_FOLDER: fileConfig.MUSIC_FOLDER || './songs',
   SUPPORTED_FORMATS: fileConfig.SUPPORTED_FORMATS || ['.mp3', '.wav', '.ogg'],
-  PORT: Number(process.env.PORT || fileConfig.PORT || 3003),
+  PORT: Number(process.env.PORT || fileConfig.PORT || 8000),
   AUTO_QUEUE_UPLOADS: (process.env.AUTO_QUEUE_UPLOADS != null
     ? String(process.env.AUTO_QUEUE_UPLOADS).toLowerCase() === 'true'
     : (typeof fileConfig.AUTO_QUEUE_UPLOADS === 'boolean' ? fileConfig.AUTO_QUEUE_UPLOADS : false)),
