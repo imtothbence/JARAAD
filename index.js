@@ -834,6 +834,22 @@ buildSongLibrary().then(lib => { SONG_LIBRARY = lib; });
 
 const LAST_CHANNEL_FILE = 'last_channel.json';
 const OWNER_ID = fileConfig.OWNER_ID || '465235772870492176';
+// Lightweight HTTP server to allow external pings (helps prevent platform sleep)
+try {
+  const http = require('http');
+  const PORT = process.env.PORT || process.env.KEEPALIVE_PORT || 3000;
+  if (!global._keepAliveHttp) {
+    global._keepAliveHttp = http.createServer((req, res) => {
+      if (req.url === '/ping') {
+        res.writeHead(200, { 'Content-Type': 'text/plain' });
+        res.end('pong ' + Date.now());
+        return;
+      }
+      res.writeHead(200, { 'Content-Type': 'text/plain' });
+      res.end('ok');
+    }).listen(PORT, () => { try { console.log(`🌐 Keepalive HTTP server listening on :${PORT}`); } catch {} });
+  }
+} catch (e) { try { console.warn('⚠️ Keepalive HTTP server failed:', e?.message || e); } catch {} }
 
 // ================== SLASH COMMANDS ==================
 // Split into guild-only (fast, no DM) and global (DM-capable) to avoid duplicates in servers
@@ -1059,7 +1075,8 @@ client.on('ready', async () => {
         try {
           if (DISCORD_TOKEN) await fetch('https://discord.com/api/v10/users/@me', { headers: { Authorization: `Bot ${DISCORD_TOKEN}` } }).catch(() => {});
         } catch {}
-      }, KEEPALIVE_INTERVAL_MS).unref?.();
+        try { console.log(`⏱️ Keepalive tick @ ${new Date().toISOString()} (interval=${KEEPALIVE_INTERVAL_MS}ms)`); } catch {}
+      }, KEEPALIVE_INTERVAL_MS); // keep reference so process stays active
     }
   } catch {}
 });
